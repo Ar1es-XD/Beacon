@@ -296,13 +296,16 @@ def update_state_with_answer(current_state_json: str, question: str, user_answer
     state_data = json.loads(current_state_json)
     
     # Safely mutate the state using deterministic Python logic, NOT the LLM
-    for experience in state_data.get("work_experience", []):
-        # We do a loose match in case the LLM slightly alters the capitalization
-        if patch_data.get("company_name", "").lower() in experience.get("company", "").lower():
+    work_exps = state_data.get("work_experience", [])
+    target_comp = patch_data.get("company_name", "").strip().lower()
+    for experience in work_exps:
+        exp_comp = experience.get("company", "").strip().lower()
+        # Loose match or fallback if only one experience exists
+        if (target_comp and (target_comp in exp_comp or exp_comp in target_comp)) or len(work_exps) == 1:
             if "impact_metrics" not in experience:
                 experience["impact_metrics"] = []
             experience["impact_metrics"].extend(patch_data.get("new_metrics", []))
-            print(f"✅ Successfully patched metrics for {experience['company']}")
+            print(f"✅ Successfully patched metrics for {experience.get('company', 'role')}")
             break
             
     return json.dumps(state_data, indent=4)
@@ -438,10 +441,11 @@ class BeaconOrchestrator:
         )
         
         # Check if the AI decided this stage is fully complete
-        if "STAGE_COMPLETE" in response.text:
+        text_out = response.text or ""
+        if "STAGE_COMPLETE" in text_out:
             return {"action": "advance"}
         else:
-            return {"action": "ask", "question": response.text.strip()}
+            return {"action": "ask", "question": text_out.strip()}
 
     def process_user_answer(self, question: str, answer: str):
         """Records the conversation and triggers the memory mutation."""
