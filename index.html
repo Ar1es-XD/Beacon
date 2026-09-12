@@ -1,62 +1,392 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BEACON - AI Resume Architect</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Marked.js for rendering the final Markdown resume -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BEACON — Agentic AI Resume Architect</title>
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- Marked.js for rendering markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body class="bg-gray-900 text-white h-screen flex flex-col font-sans">
+<body>
 
-    <!-- Navbar -->
-    <header class="p-4 border-b border-gray-800 flex justify-between items-center">
-        <h1 class="text-xl font-bold tracking-widest text-blue-400">BEACON ⛵</h1>
-        <span class="text-sm text-gray-400" id="status-indicator">Awaiting Upload...</span>
-    </header>
+  <!-- Apple Translucent Frosted Glass Header -->
+  <header class="apple-header">
+    <div class="brand-wrapper">
+      <div class="beacon-orb">⛵</div>
+      <div class="brand-text">
+        <h1>BEACON</h1>
+        <p>Agentic Resume Architect</p>
+      </div>
+    </div>
 
-    <!-- Main Workspace -->
-    <main class="flex-1 flex overflow-hidden">
+    <!-- Pipeline Stage Stepper -->
+    <nav class="pipeline-stepper" id="pipeline-stepper" aria-label="Workflow Stages">
+      <div class="stage-step active" id="step-ingest" title="PDF Ingestion & Schema Extraction">
+        <span class="step-num">1</span>
+        <span class="step-label">Ingest</span>
+      </div>
+      <div class="stage-divider"></div>
+      <div class="stage-step" id="step-validation" title="Structured Data & Link Validation">
+        <span class="step-num">2</span>
+        <span class="step-label">Validate</span>
+      </div>
+      <div class="stage-divider"></div>
+      <div class="stage-step" id="step-deepdive" title="Impact Metrics & Technical Deep Dive">
+        <span class="step-num">3</span>
+        <span class="step-label">Deep Dive</span>
+      </div>
+      <div class="stage-divider"></div>
+      <div class="stage-step" id="step-behavioral" title="Behavioral & Leadership Synthesis">
+        <span class="step-num">4</span>
+        <span class="step-label">Behavioral</span>
+      </div>
+      <div class="stage-divider"></div>
+      <div class="stage-step" id="step-drafting" title="ATS Resume Generation">
+        <span class="step-num">5</span>
+        <span class="step-label">Drafting</span>
+      </div>
+    </nav>
+
+    <!-- Header Actions & Status -->
+    <div class="header-actions">
+      <!-- Live / Demo Mode Toggle -->
+      <button class="apple-btn apple-btn-secondary apple-btn-sm" id="mode-toggle-btn" title="Toggle Live Gemini / Interactive Demo Mode" style="font-size: 0.74rem;">
+        <span id="mode-icon">⚡</span> <span id="mode-label">Live Agent</span>
+      </button>
+
+      <div class="status-pill" id="status-pill">
+        <span class="dot"></span>
+        <span id="status-text">Backend Ready</span>
+      </div>
+      
+      <!-- Audio Haptic Toggle -->
+      <button class="icon-btn" id="audio-toggle-btn" title="Toggle Audio Feedback" aria-label="Toggle Audio Feedback">
+        <span id="audio-icon">🔔</span>
+      </button>
+
+      <!-- Reset / New Session -->
+      <button class="icon-btn" id="reset-btn" title="Start New Session" aria-label="Start New Session">
+        <span>🔄</span>
+      </button>
+
+      <!-- Info / Help -->
+      <button class="icon-btn" id="info-modal-btn" title="About BEACON Architecture" aria-label="About BEACON">
+        <span>ℹ️</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Rate Limit / Notice Banner (Hidden by default) -->
+  <div id="rate-limit-banner" class="hidden" style="display: none; background: rgba(245, 158, 11, 0.12); border-bottom: 1px solid rgba(245, 158, 11, 0.25); color: #fde68a; padding: 0.45rem 1.5rem; font-size: 0.8rem; align-items: center; justify-content: space-between; z-index: 30;">
+    <div style="display: flex; align-items: center; gap: 0.5rem;">
+      <span>⏳</span>
+      <span id="rate-limit-message">Gemini API rate limit reached. Waiting for quota cooldown...</span>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <button type="button" id="switch-to-demo-btn" style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: #fff; padding: 2px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer;">
+        Switch to Instant Demo Mode
+      </button>
+      <button type="button" id="dismiss-banner-btn" style="background: transparent; border: none; color: #cbd5e1; cursor: pointer; font-size: 0.9rem;">✕</button>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main class="workspace-container">
+
+    <!-- Left Panel: Document & Memory Workspace -->
+    <section class="panel panel-left" aria-label="Document Workspace">
+      <div class="panel-header">
+        <div class="segment-control">
+          <button class="segment-btn active" id="tab-doc-btn" data-target="view-document">
+            <span>📄</span> Document State
+          </button>
+          <button class="segment-btn" id="tab-resume-btn" data-target="view-final-resume">
+            <span>✨</span> Final ATS Resume <span class="badge-pill hidden" id="final-badge">NEW</span>
+          </button>
+          <button class="segment-btn" id="tab-json-btn" data-target="view-raw-json">
+            <span>🧠</span> Agent Memory
+          </button>
+        </div>
+
+        <div id="file-indicator" class="hidden text-xs text-muted font-mono" style="font-size: 0.75rem; color: var(--text-muted);">
+          <span id="file-indicator-name">resume.pdf</span>
+        </div>
+      </div>
+
+      <!-- Tab View 1: Document State (Before & During Interview) -->
+      <div class="panel-content" id="view-document">
         
-        <!-- Left Panel: Upload & Document View -->
-        <section class="w-1/2 border-r border-gray-800 p-8 flex flex-col bg-gray-800/50">
-            <div id="upload-container" class="flex flex-col items-center justify-center h-full border-2 border-dashed border-gray-600 rounded-xl bg-gray-800 p-8 text-center transition hover:border-blue-500">
-                <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                <h2 class="text-lg font-semibold mb-2">Upload Existing Resume</h2>
-                <p class="text-sm text-gray-400 mb-6">PDF format up to 5MB</p>
-                <input type="file" id="resume-upload" accept=".pdf" class="hidden">
-                <button onclick="document.getElementById('resume-upload').click()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-lg font-medium transition">Select PDF</button>
+        <!-- Upload State (Shown before PDF upload) -->
+        <div id="upload-card-wrapper" class="flex flex-col gap-4" style="display: flex; flex-direction: column; gap: 1rem;">
+          
+          <!-- Drag & Drop Zone -->
+          <div class="dropzone-card" id="dropzone" role="button" tabindex="0" aria-label="Upload PDF Resume">
+            <div class="dropzone-icon">📄</div>
+            <h2 class="dropzone-title">Upload Existing Resume</h2>
+            <p class="dropzone-desc">Drag and drop your PDF resume here, or click to browse files</p>
+            <input type="file" id="resume-upload" accept=".pdf" style="display: none;">
+            <button type="button" class="apple-btn apple-btn-primary" id="browse-btn">
+              <span>Choose PDF File</span>
+            </button>
+          </div>
+
+          <!-- One-Click Sample Resume Launcher -->
+          <div class="sample-card" id="sample-card">
+            <div class="sample-meta">
+              <h4>⚡ Quick Test: Wealth & Wisdom Creator Resume</h4>
+              <p>Test BEACON immediately using the bundled <code>sample_resume.pdf</code>.</p>
+            </div>
+            <button type="button" class="apple-btn apple-btn-amber apple-btn-sm" id="load-sample-btn">
+              <span>✨ Load Sample</span>
+            </button>
+          </div>
+
+          <!-- Architecture Feature Highlights -->
+          <div class="feature-grid">
+            <div class="feature-card">
+              <div class="icon">🧬</div>
+              <h5>Delta Patching Memory</h5>
+              <p>Safely extracts and patches quantifiable achievements directly without hallucinating state rewrites.</p>
+            </div>
+            <div class="feature-card">
+              <div class="icon">📚</div>
+              <h5>ChromaDB Vector RAG</h5>
+              <p>Dynamically queries ATS rubrics for Tech, Finance, Healthcare, and Marketing roles.</p>
+            </div>
+            <div class="feature-card">
+              <div class="icon">🌐</div>
+              <h5>Autonomous URL Scraper</h5>
+              <p>Inspects portfolio, YouTube, and GitHub links inline to verify project credibility.</p>
+            </div>
+            <div class="feature-card">
+              <div class="icon">🎯</div>
+              <h5>CAR / STAR Framework</h5>
+              <p>Transforms vague duty descriptions into measurable, high-impact resume bullet points.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Parsed Resume Profile (Shown once uploaded & during interview) -->
+        <div id="parsed-profile-wrapper" class="hidden" style="display: none; flex-direction: column; gap: 1rem;">
+          
+          <!-- Candidate Header Card -->
+          <div class="state-card">
+            <div class="candidate-banner">
+              <div class="candidate-avatar" id="cand-avatar">B</div>
+              <div class="candidate-details">
+                <h4 id="cand-name">Candidate Name</h4>
+                <p id="cand-email">candidate@example.com</p>
+              </div>
             </div>
 
-            <!-- This will show the final rendered resume -->
-            <div id="final-resume-container" class="hidden h-full overflow-y-auto prose prose-invert max-w-none p-4"></div>
-        </section>
-
-        <!-- Right Panel: Agent Chat Interface -->
-        <section class="w-1/2 flex flex-col bg-gray-900 relative">
-            
-            <!-- Chat History -->
-            <div id="chat-box" class="flex-1 overflow-y-auto p-6 space-y-4">
-                <!-- Messages will be injected here -->
-                <div class="text-gray-500 text-center mt-10 italic">Upload your resume to start the interview.</div>
+            <div class="flex items-center gap-2" id="cand-links-wrapper" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <!-- Social links will be injected here -->
             </div>
+          </div>
 
-            <!-- Input Area -->
-            <div class="p-4 bg-gray-800 border-t border-gray-700">
-                <div class="flex gap-2">
-                    <input type="text" id="user-input" disabled placeholder="Type your answer..." class="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 disabled:opacity-50">
-                    <button id="send-btn" disabled class="bg-white text-gray-900 px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 transition disabled:opacity-50">Send</button>
-                </div>
+          <!-- ATS Rubric & Industry Standards Card (RAG) -->
+          <div class="state-card" id="rag-rubric-card">
+            <div class="state-header">
+              <h3><span>🎯</span> Target Industry ATS Rubric</h3>
+              <span class="apple-btn-sm" style="background: rgba(56, 189, 248, 0.15); color: var(--accent-blue); padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 600;">Vector RAG</span>
             </div>
-            
-            <!-- Loading Overlay -->
-            <div id="loading-overlay" class="hidden absolute inset-0 bg-gray-900/80 flex items-center justify-center backdrop-blur-sm">
-                <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-white"></div>
-            </div>
-        </section>
-    </main>
+            <p id="rag-rubric-text" style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5;">
+              Active industry standard: Computer Science / Digital Strategy. High focus on system performance, API latency, and measurable revenue conversion.
+            </p>
+          </div>
 
-    <script src="script.js"></script>
+          <!-- Skills Cloud Card -->
+          <div class="state-card">
+            <div class="state-header">
+              <h3><span>⚡</span> Extracted Skills</h3>
+              <span id="skill-count" style="font-size: 0.72rem; color: var(--text-muted);">0 skills</span>
+            </div>
+            <div class="tag-cloud" id="skills-cloud">
+              <!-- Skill chips injected here -->
+            </div>
+          </div>
+
+          <!-- Work Experience & Live Impact Metrics Card -->
+          <div class="state-card">
+            <div class="state-header">
+              <h3><span>💼</span> Work Experience & Live Metrics</h3>
+              <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: 600;">Live Patching</span>
+            </div>
+            <div id="experience-list">
+              <!-- Experience items injected here -->
+            </div>
+          </div>
+
+          <!-- Projects Card -->
+          <div class="state-card" id="projects-card">
+            <div class="state-header">
+              <h3><span>🚀</span> Projects</h3>
+            </div>
+            <div id="projects-list">
+              <!-- Projects injected here -->
+            </div>
+          </div>
+
+          <!-- Education Card -->
+          <div class="state-card" id="education-card">
+            <div class="state-header">
+              <h3><span>🎓</span> Education</h3>
+            </div>
+            <div id="education-list">
+              <!-- Education injected here -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Tab View 2: Final ATS Resume (Rendered & Exportable) -->
+      <div class="panel-content hidden" id="view-final-resume" style="display: none;">
+        <div class="resume-viewer-container">
+          <div class="resume-toolbar">
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button type="button" class="apple-btn apple-btn-primary apple-btn-sm" id="copy-markdown-btn">
+                <span>📋 Copy Markdown</span>
+              </button>
+              <button type="button" class="apple-btn apple-btn-secondary apple-btn-sm" id="download-md-btn">
+                <span>⬇️ Download .md</span>
+              </button>
+              <button type="button" class="apple-btn apple-btn-secondary apple-btn-sm" id="print-resume-btn">
+                <span>🖨️ Print / Save PDF</span>
+              </button>
+            </div>
+            <div>
+              <button type="button" class="apple-btn apple-btn-secondary apple-btn-sm" id="toggle-raw-resume-btn">
+                <span id="toggle-raw-label">Show Raw Source</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Rendered Paper View -->
+          <div class="resume-paper" id="resume-paper">
+            <p style="color: #64748b; font-style: italic; text-align: center; margin-top: 3rem;">
+              The final ATS-optimized resume will be drafted once the interview is complete.
+            </p>
+          </div>
+
+          <!-- Raw Markdown View (Hidden by default) -->
+          <pre class="resume-raw hidden" id="resume-raw" style="display: none;"></pre>
+        </div>
+      </div>
+
+      <!-- Tab View 3: Raw Agent JSON State -->
+      <div class="panel-content hidden" id="view-raw-json" style="display: none;">
+        <div class="state-card" style="height: 100%; display: flex; flex-direction: column;">
+          <div class="state-header">
+            <h3><span>🧠</span> BEACON In-Memory State (Schema-Driven)</h3>
+            <button type="button" class="apple-btn apple-btn-secondary apple-btn-sm" id="copy-json-btn">
+              <span>Copy JSON</span>
+            </button>
+          </div>
+          <pre id="json-state-viewer" class="resume-raw" style="flex: 1;"></pre>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Panel: Agentic Interview Feed -->
+    <section class="panel panel-right" aria-label="Agent Interview Copilot">
+      
+      <!-- Chat Feed -->
+      <div class="chat-feed" id="chat-feed">
+        
+        <!-- Welcome Hero Message -->
+        <div class="chat-bubble agent">
+          <div class="bubble-meta">
+            <span>⛵ BEACON AGENT</span> · <span>INTERVIEW COPILOT</span>
+          </div>
+          <div class="bubble-body">
+            <p><strong>Welcome to BEACON.</strong></p>
+            <p style="margin-top: 0.35rem;">
+              I am your autonomous Agentic Resume Architect. I don't just format your resume — I conduct a targeted interview to extract <strong>quantifiable impact metrics</strong>, verify links, and tailor your bullet points to industry ATS rubrics.
+            </p>
+            <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--text-secondary);">
+              👉 To begin, drag and drop your PDF resume on the left, or click <strong>✨ Load Sample</strong> to explore immediately.
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Quick Suggestion Chips Bar -->
+      <div class="suggestions-bar" id="suggestions-bar">
+        <span style="font-size: 0.72rem; color: var(--text-muted); align-self: center; margin-right: 0.25rem;">Quick Answers:</span>
+        <button type="button" class="suggestion-chip" data-text="Through my vertical video strategy, I grew the channel to over 50,000 subscribers and consistently drove a 12% conversion rate on affiliate campaigns.">
+          📈 Grew to 50k subs with 12% conversion
+        </button>
+        <button type="button" class="suggestion-chip" data-text="Architected an event-driven microservices backend that reduced p99 API latency by 42% and handled 2.5M daily requests.">
+          ⚡ Reduced p99 latency by 42%
+        </button>
+        <button type="button" class="suggestion-chip" data-text="Led a cross-functional team of 5 engineers, establishing CI/CD automation that cut release cycle time from 2 weeks to 3 hours.">
+          👥 Led 5 engineers, cut releases to 3 hours
+        </button>
+        <button type="button" class="suggestion-chip" data-text="Everything looks accurate and comprehensive. Please proceed to drafting the final resume.">
+          ✅ Ready to draft final resume
+        </button>
+      </div>
+
+      <!-- Chat Input Area -->
+      <div class="chat-input-area">
+        <div class="input-wrapper">
+          <textarea 
+            id="user-input" 
+            class="chat-textarea" 
+            rows="1" 
+            disabled 
+            placeholder="Upload a resume to begin the interview..."
+            aria-label="Your answer to BEACON"
+          ></textarea>
+          
+          <button type="button" class="send-action-btn" id="send-btn" disabled title="Send Answer (Enter)" aria-label="Send Answer">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"></line>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+          </button>
+        </div>
+
+        <div class="input-subtext">
+          <span id="input-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line</span>
+          <span id="session-id-display">Session: None</span>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <!-- Info Modal -->
+  <div id="info-modal" class="hidden" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(12px); z-index: 200; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-surface-elevated); border: 1px solid var(--border-highlight); border-radius: 16px; width: 90%; max-width: 540px; padding: 1.75rem; box-shadow: var(--shadow-float);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff;">About BEACON</h3>
+        <button type="button" class="icon-btn" id="close-modal-btn" aria-label="Close Modal">✕</button>
+      </div>
+      <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; margin-bottom: 0.75rem;">
+        BEACON is an agentic resume engineering platform built on Google Gemini 3.6 Flash and ChromaDB vector retrieval.
+      </p>
+      <ul style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; padding-left: 1.25rem; margin-bottom: 1.25rem;">
+        <li><strong>Multi-stage Orchestration:</strong> Progresses logically from Ingestion through Validation, Deep Dive, Behavioral, and Drafting.</li>
+        <li><strong>Deterministic Delta Patching:</strong> Employs structured schemas to patch specific metrics into memory without full-state hallucinations.</li>
+        <li><strong>Local ATS Vector Store:</strong> Tailors achievements according to real recruiter rubrics.</li>
+      </ul>
+      <div style="text-align: right;">
+        <button type="button" class="apple-btn apple-btn-primary apple-btn-sm" id="modal-ok-btn">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript Logic -->
+  <script src="script.js"></script>
 </body>
 </html>
