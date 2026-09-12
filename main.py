@@ -1,11 +1,33 @@
 import os
+import json
+import time
+from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from google.genai.errors import ServerError
+
+# -------------------------------------------------------------
+# RETRY LOGIC (STDLIB)
+# -------------------------------------------------------------
+
+def retry_on_server_error(max_attempts=3, initial_delay=2):
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except ServerError:
+                    if attempt == max_attempts - 1:
+                        raise
+                    time.sleep(delay)
+                    delay *= 2
+        return wrapper
+    return decorator
+
 # -------------------------------------------------------------
 # AGENTIC CONCEPT 1: SCHEMA-DRIVEN STATE
 # -------------------------------------------------------------
@@ -46,75 +68,66 @@ class StatePatch(BaseModel):
     company_name: str = Field(description="The exact company name this answer applies to")
     new_metrics: List[str] = Field(description="Professional, quantifiable resume bullet points extracted from the candidate's answer")
 
-
 # -------------------------------------------------------------
 # AGENTIC CONCEPT 2 & 4: NATIVE MULTIMODAL INGESTION (INLINE)
 # -------------------------------------------------------------
 
 load_dotenv()
-api_key = os.environ.get("GEMINI_API_KEY")
 
-# Explicitly pass the key to avoid local credential conflicts
-client = genai.Client(api_key=api_key) 
+# Lazy Gemini client initialization to avoid crashes at module import time
+def get_client() -> genai.Client:
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY environment variable is not configured. "
+            "Please set GEMINI_API_KEY in your Vercel Project Settings > Environment Variables."
+        )
+    return genai.Client(api_key=api_key)
+
+class _LazyGenAIClient:
+    """Lazily initializes the Gemini client on first access to prevent import-time crashes."""
+    _client = None
+
+    def __getattr__(self, name):
+        if self._client is None:
+            self._client = get_client()
+        return getattr(self._client, name)
+
+client = _LazyGenAIClient()
 
 # -------------------------------------------------------------
 # AGENTIC CONCEPT 10: UNIVERSAL TOOLS & FUNCTION CALLING
 # -------------------------------------------------------------
 
-
-
-# AGENTIC CONCEPT 11: LOCAL RAG (RETRIEVAL-AUGMENTED GENERATION)
+# AGENTIC CONCEPT 11: ATS INDUSTRY RUBRICS
 # ---------------------------------------------------------
-import chromadb
-
-# Initialize ChromaDB client (stores data locally in a 'vector_db' folder)
-# Change line 71 in main.py to:
-chroma_client = chromadb.Client()
-
-# Create or get a collection for ATS rubrics
-ats_collection = chroma_client.get_or_create_collection(name="ats_rubrics")
-
-# Seed the database with some baseline knowledge (This runs if the DB is empty)
-if ats_collection.count() == 0:
-    print("🌱 Seeding ChromaDB Vector Store with ATS Industry Rubrics...")
-    ats_collection.add(
-        documents=[
-            "Computer Science standards: Focus heavily on system architecture, API design, scalability metrics (e.g., 'reduced latency by 40%'), and clean version control.",
-            "Medical/Healthcare standards (BHMS/Allied): Emphasize clinical diagnostics accuracy, patient record maintenance, adherence to safety compliance protocols, and compassionate care.",
-            "Business/Finance standards: Highlight financial modeling, data-driven market research, stakeholder communication, and clear ROI or percentage-based growth tracking.",
-            "Content Creator/Marketing standards: Highlight subscriber growth percentages, conversion rates, engagement metrics, A/B testing results, and affiliate revenue generation."
-        ],
-        metadatas=[{"industry": "tech"}, {"industry": "medical"}, {"industry": "finance"}, {"industry": "marketing"}],
-        ids=["cs_rubric", "med_rubric", "fin_rubric", "marketing_rubric"]
-    )
+INDUSTRY_RUBRICS = {
+    "tech": "Computer Science standards: Focus heavily on system architecture, API design, scalability metrics (e.g., 'reduced latency by 40%'), and clean version control.",
+    "medical": "Medical/Healthcare standards (BHMS/Allied): Emphasize clinical diagnostics accuracy, patient record maintenance, adherence to safety compliance protocols, and compassionate care.",
+    "finance": "Business/Finance standards: Highlight financial modeling, data-driven market research, stakeholder communication, and clear ROI or percentage-based growth tracking.",
+    "marketing": "Content Creator/Marketing standards: Highlight subscriber growth percentages, conversion rates, engagement metrics, A/B testing results, and affiliate revenue generation."
+}
 
 def retrieve_industry_knowledge(query: str) -> str:
     """
-    Searches the ChromaDB vector database for precise technical requirements 
-    and ATS guidelines based on the candidate's target role.
+    Searches for precise technical requirements and ATS guidelines based on the candidate's target role.
     """
-    print(f"\n📚 [RAG TRIGGERED] Searching vector database for: '{query}'...")
-    
-    results = ats_collection.query(
-        query_texts=[query],
-        n_results=1 # Get the single most relevant industry rubric
-    )
-    
-    if results['documents'] and results['documents'][0]:
-        best_match = results['documents'][0][0]
-        return best_match
-    
+    print(f"\n📚 [RAG TRIGGERED] Searching ATS industry knowledge for: '{query}'...")
+    q = query.lower()
+    if any(k in q for k in ["med", "health", "doctor", "bhms", "clinic", "patient", "allied"]):
+        return INDUSTRY_RUBRICS["medical"]
+    elif any(k in q for k in ["finan", "bank", "invest", "roi", "account", "money", "equity", "wealth", "portfolio", "business"]):
+        return INDUSTRY_RUBRICS["finance"]
+    elif any(k in q for k in ["market", "content", "social", "growth", "seo", "media", "creator", "youtube"]):
+        return INDUSTRY_RUBRICS["marketing"]
+    elif any(k in q for k in ["code", "software", "dev", "tech", "cs", "computer", "engineer", "data", "web", "api"]):
+        return INDUSTRY_RUBRICS["tech"]
+
     return "General professional standards: Focus on clarity, quantifiable impact, ownership of projects, and team leadership."
 
-
-# -------------------------------------------------------------
-# AGENTIC CONCEPT 12: MCP (MODEL CONTEXT PROTOCOL) CLIENT
-# -------------------------------------------------------------
 # -------------------------------------------------------------
 # AGENTIC CONCEPT 12: URL SCRAPER (DIRECT TOOL)
 # -------------------------------------------------------------
-# AGENTIC CONCEPT 12: URL SCRAPER (DIRECT TOOL)
-# ---------------------------------------------------------
 import requests
 from bs4 import BeautifulSoup
 
@@ -146,37 +159,7 @@ def inspect_project_link(url: str) -> str:
     except Exception as e:
         return f"Fetch Failed: {str(e)}"
 
-def test_agent_tool():
-    """Tests if BEACON can autonomously trigger a web scraper to read an external link."""
-    print("\n🧠 Testing Universal Web Scraper Tool...")
-    
-    prompt = """
-    I am an engineering student. I built a project and hosted it here: https://example.com
-    
-    Can you go read that website, and write a single, professional resume bullet point 
-    about what that website actually is?
-    """
-    
-    response = client.models.generate_content(
-        model='gemini-3.6-flash',
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            tools=[direct_fetch_url], # <--- We hand the direct scraper to the AI
-        )
-    )
-    
-    print("\n==========================================")
-    print("🤖 BEACON DRAFTED:")
-    print(response.text)
-    print("==========================================\n")
-
-
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=2, min=2, max=10),
-    retry=retry_if_exception_type(ServerError),
-    reraise=True
-)
+@retry_on_server_error()
 def parse_resume_native(pdf_path: str) -> str:
     """Reads the PDF locally and sends it inline to Gemini to avoid File API permission issues."""
     print(f"📄 Reading {pdf_path} locally...")
@@ -208,51 +191,6 @@ def parse_resume_native(pdf_path: str) -> str:
             response_mime_type="application/json",
             response_schema=ResumeState,
         ),
-    )
-    
-    return response.text
-import json
-
-# -------------------------------------------------------------
-# AGENTIC CONCEPT 7: STATE EVALUATION & PROACTIVE QUESTIONING
-# -------------------------------------------------------------
-
-def evaluate_state_and_generate_question(state_json_str: str) -> str:
-    """
-    Acts as the 'Agent Brain'. It reviews the structured state, identifies missing
-    or weak areas (like lack of metrics), and formulates an interview question.
-    """
-    print("\n🧠 Agent is evaluating the resume for gaps...")
-    
-    # We parse the string back into a Python dictionary to easily analyze it
-    state_data = json.loads(state_json_str)
-    
-    # 1. Identify specific gaps (Hardcoded logic for the prototype)
-    target_role = None
-    company_name = None
-    
-    for experience in state_data.get("work_experience", []):
-        if len(experience.get("impact_metrics", [])) == 0:
-            target_role = experience.get("role")
-            company_name = experience.get("company")
-            break # Stop at the first gap we find
-            
-    if not target_role:
-        return "Resume looks comprehensive! I have all the data I need."
-
-    # 2. Use the LLM to generate a natural, encouraging question based on the gap
-    prompt = f"""
-    You are an encouraging, expert technical recruiter building a resume.
-    You noticed that the candidate's experience as a '{target_role}' at '{company_name}' lacks quantifiable impact metrics.
-    
-    Ask a single, conversational, and encouraging interview question to draw out a measurable result or achievement for this role.
-    Do NOT give advice. Just ask the question.
-    """
-    
-    response = client.models.generate_content(
-        model='gemini-3.6-flash', # <--- Change this to 2.5
-        contents=prompt,
-    # ... rest of your code
     )
     
     return response.text
@@ -343,49 +281,7 @@ def generate_final_resume(final_state_json: str) -> str:
 
 
 # if __name__ == "__main__":
-#     sample_pdf_path = "sample_resume.pdf"
-    
-#     if os.path.exists(sample_pdf_path):
-#         # Phase 1: Ingestion
-#         structured_json = parse_resume_native(sample_pdf_path)
-        
-#         # Phase 2: Evaluation
-#         next_question = evaluate_state_and_generate_question(structured_json)
-        
-#         print("\n==========================================")
-#         print("🤖 BEACON SAYS:")
-#         print(next_question)
-#         print("==========================================\n")
-        
-#         # Phase 3: Memory Mutation
-#         print("👤 YOU SAY:")
-#         simulated_answer = "Through my vertical video strategy, I grew the channel to over 50,000 subscribers and consistently drove a 12% conversion rate on Cuelinks affiliate campaigns."
-#         print(simulated_answer)
-        
-#         updated_json = update_state_with_answer(
-#             current_state_json=structured_json, 
-#             question=next_question, 
-#             user_answer=simulated_answer
-#         )
-        
-#         # Phase 4: Final Synthesis
-#         final_markdown_resume = generate_final_resume(updated_json)
-        
-#         # Save the output to a new Markdown file
-#         output_filename = "optimized_resume.md"
-#         with open(output_filename, "w") as f:
-#             f.write(final_markdown_resume)
-            
-#         print(f"\n🎉 SUCCESS! The final optimized resume has been saved to '{output_filename}'.")
-#         print("Check your BEACON folder to see the final result!")
-        
-#     else:
-#         print(f"⚠️ Please place a valid '{sample_pdf_path}' into the project root.")
-
-import json
-from enum import Enum
-
-# Define the exact workflow stages from BEACON F.jpg
+# Define the exact workflow stages from BEACON architecture
 class WorkflowStage(Enum):
     VALIDATION = 2      # Step 2: Structured Data Validation
     DEEP_DIVE = 3       # Step 3: Proactive Deep Dive (Work/Projects)
@@ -393,20 +289,13 @@ class WorkflowStage(Enum):
     CLARIFICATION = 5   # Step 5: Collaborative Clarification Loop
     DRAFTING = 6        # Step 6: AI-Powered Content Drafting
 
-
-
-
 class BeaconOrchestrator:
     def __init__(self, initial_state_json: str):
         self.state_json = initial_state_json
         self.current_stage = WorkflowStage.VALIDATION
         self.chat_history = []
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=2, min=2, max=10),
-        retry=retry_if_exception_type(ServerError),
-        reraise=True
-    )
+
+    @retry_on_server_error()
     
     def determine_next_action(self) -> dict:
         """

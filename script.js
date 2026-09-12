@@ -19,7 +19,6 @@
   let currentStage = "INGESTION";
   let currentParsedState = null;
   let isWaitingForAgent = false;
-  let audioEnabled = localStorage.getItem("beacon_audio") !== "false";
   let demoStepIndex = 0;
 
   // -------------------------------------------------------------
@@ -147,8 +146,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   const statusPill = document.getElementById("status-pill");
   const statusText = document.getElementById("status-text");
   const resetBtn = document.getElementById("reset-btn");
-  const audioToggleBtn = document.getElementById("audio-toggle-btn");
-  const audioIcon = document.getElementById("audio-icon");
   const infoModalBtn = document.getElementById("info-modal-btn");
   const infoModal = document.getElementById("info-modal");
   const closeModalBtn = document.getElementById("close-modal-btn");
@@ -208,81 +205,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   let isRawView = false;
 
   // -------------------------------------------------------------
-  // Web Audio API — Apple-Style Sound Haptics
-  // -------------------------------------------------------------
-  const audioCtx = (function () {
-    try {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      return new AudioContext();
-    } catch (e) {
-      return null;
-    }
-  })();
-
-  function playSound(type) {
-    if (!audioEnabled || !audioCtx) return;
-    if (audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
-
-    try {
-      const now = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      if (type === "tap") {
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(650, now);
-        osc.frequency.exponentialRampToValueAtTime(200, now + 0.04);
-        gain.gain.setValueAtTime(0.08, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
-        osc.start(now);
-        osc.stop(now + 0.04);
-      } else if (type === "chime") {
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(523.25, now);
-        osc.frequency.setValueAtTime(783.99, now + 0.08);
-        gain.gain.setValueAtTime(0.12, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-        osc.start(now);
-        osc.stop(now + 0.35);
-      } else if (type === "fanfare") {
-        [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
-          const chordOsc = audioCtx.createOscillator();
-          const chordGain = audioCtx.createGain();
-          chordOsc.type = "triangle";
-          chordOsc.frequency.value = freq;
-          chordOsc.connect(chordGain);
-          chordGain.connect(audioCtx.destination);
-          const start = now + i * 0.08;
-          chordGain.gain.setValueAtTime(0.1, start);
-          chordGain.gain.exponentialRampToValueAtTime(0.001, start + 0.45);
-          chordOsc.start(start);
-          chordOsc.stop(start + 0.45);
-        });
-      }
-    } catch (e) {
-      // Audio fallback silent
-    }
-  }
-
-  function updateAudioUI() {
-    audioIcon.innerText = audioEnabled ? "🔔" : "🔕";
-    audioToggleBtn.title = audioEnabled ? "Sound Effects: Enabled" : "Sound Effects: Muted";
-  }
-  updateAudioUI();
-
-  audioToggleBtn.addEventListener("click", () => {
-    audioEnabled = !audioEnabled;
-    localStorage.setItem("beacon_audio", audioEnabled);
-    updateAudioUI();
-    if (audioEnabled) playSound("tap");
-    showToast(audioEnabled ? "Audio effects enabled" : "Audio effects muted");
-  });
-
-  // -------------------------------------------------------------
   // Mode Switcher (Live Agent vs Instant Demo)
   // -------------------------------------------------------------
   function setMode(demo) {
@@ -304,12 +226,10 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   }
 
   modeToggleBtn.addEventListener("click", () => {
-    playSound("tap");
     setMode(!isDemoMode);
   });
 
   switchToDemoBtn.addEventListener("click", () => {
-    playSound("tap");
     rateLimitBanner.style.display = "none";
     setMode(true);
     if (!currentParsedState) {
@@ -346,7 +266,11 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   // -------------------------------------------------------------
   // Toast Notifications
   // -------------------------------------------------------------
+  function showToast(message, icon = "ℹ️") {
+    const toast = document.createElement("div");
+    toast.className = "toast";
     toast.textContent = `${icon} ${message}`;
+    toastContainer.appendChild(toast);
 
     setTimeout(() => {
       toast.style.opacity = "0";
@@ -367,7 +291,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
 
   tabs.forEach(({ btn, view }) => {
     btn.addEventListener("click", () => {
-      playSound("tap");
       tabs.forEach((t) => {
         t.btn.classList.remove("active");
         t.view.classList.add("hidden");
@@ -454,8 +377,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       showToast("Please select a valid PDF file", "⚠️");
       return;
     }
-
-    playSound("tap");
     setWorkingState(true, "Extracting PDF & Initializing Agent...");
     fileIndicator.classList.remove("hidden");
     fileIndicatorName.innerText = file.name;
@@ -500,7 +421,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
 
   // Sample Resume Quick Launcher
   loadSampleBtn.addEventListener("click", async () => {
-    playSound("tap");
     setWorkingState(true, "Parsing sample resume with Gemini...");
     fileIndicator.classList.remove("hidden");
     fileIndicatorName.innerText = "sample_resume.pdf";
@@ -566,7 +486,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     userInput.focus();
 
     // Sound and Toast
-    playSound("chime");
     showToast(`Parsed ${filename} successfully!`, "✅");
 
     // Display Agent's First Question
@@ -712,8 +631,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       showToast("Please upload a resume first", "⚠️");
       return;
     }
-
-    playSound("tap");
     appendUserMessage(text);
     userInput.value = "";
     resizeTextarea();
@@ -754,7 +671,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       if (data.status === "complete") {
         onInterviewCompleted(data.final_resume);
       } else {
-        playSound("chime");
         appendAgentMessage(data.agent_message);
       }
     } catch (err) {
@@ -785,7 +701,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
           renderParsedProfile(currentParsedState);
           showToast("Extracted new impact metric!", "✨");
         }
-        playSound("chime");
         appendAgentMessage(
           `Great detail! I've updated your education dates (2021 – 2026) and contact header.\n\n` +
           `Now let's dive into **Wealth & Wisdom**: What were the measurable conversion rates or revenue outcomes from your Cuelinks affiliate marketing campaigns?`
@@ -800,7 +715,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
           renderParsedProfile(currentParsedState);
           showToast("Patched affiliate metric into memory!", "✨");
         }
-        playSound("chime");
         appendAgentMessage(
           `Outstanding. A 12% conversion rate is exceptional for affiliate UGC.\n\n` +
           `Moving to **Leadership & Process**: How did you handle tight sponsor deadlines while ensuring multi-dress sequence quality remained uncompromised?`
@@ -808,7 +722,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       } else if (demoStepIndex === 4) {
         // Stage 5: Clarification
         setStage("CLARIFICATION");
-        playSound("chime");
         appendAgentMessage(
           `Perfect. We now have verified achievements, strong action verbs, and clear quantifiable impact.\n\n` +
           `Before I synthesize everything into your final ATS-compliant resume, do you have any final certifications or portfolio additions? If you're ready, simply reply **"Proceed"**!`
@@ -846,7 +759,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   function onInterviewCompleted(markdownResume) {
     finalResumeMarkdown = markdownResume || DEMO_OPTIMIZED_MARKDOWN;
     setStage("DRAFTING");
-    playSound("fanfare");
     showToast("Resume optimization complete! ✨", "🎉");
 
     appendAgentMessage(
@@ -981,7 +893,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     userInput.value = text;
     resizeTextarea();
     userInput.focus();
-    playSound("tap");
   });
 
   // -------------------------------------------------------------
@@ -994,7 +905,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     }
     try {
       await navigator.clipboard.writeText(finalResumeMarkdown);
-      playSound("tap");
       showToast("Markdown copied to clipboard!", "📋");
     } catch (e) {
       showToast("Clipboard copy failed", "❌");
@@ -1006,7 +916,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       showToast("No resume content to download yet", "⚠️");
       return;
     }
-    playSound("tap");
     const blob = new Blob([finalResumeMarkdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1024,12 +933,10 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       showToast("No resume drafted to print yet", "⚠️");
       return;
     }
-    playSound("tap");
     window.print();
   });
 
   toggleRawResumeBtn.addEventListener("click", () => {
-    playSound("tap");
     isRawView = !isRawView;
     if (isRawView) {
       resumePaper.style.display = "none";
@@ -1051,7 +958,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     }
     try {
       await navigator.clipboard.writeText(JSON.stringify(currentParsedState, null, 2));
-      playSound("tap");
       showToast("JSON state copied to clipboard!", "📋");
     } catch (e) {
       showToast("Copy failed", "❌");
@@ -1063,7 +969,6 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   // -------------------------------------------------------------
   resetBtn.addEventListener("click", () => {
     if (confirm("Start a new BEACON session? Current conversation and state will be cleared.")) {
-      playSound("tap");
       currentSessionId = null;
       currentStage = "INGESTION";
       currentParsedState = null;
@@ -1110,14 +1015,12 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   // Info Modal Handlers
   // -------------------------------------------------------------
   infoModalBtn.addEventListener("click", () => {
-    playSound("tap");
     infoModal.classList.remove("hidden");
     infoModal.style.display = "flex";
   });
 
   [closeModalBtn, modalOkBtn].forEach((btn) => {
     btn.addEventListener("click", () => {
-      playSound("tap");
       infoModal.classList.add("hidden");
       infoModal.style.display = "none";
     });
