@@ -113,14 +113,21 @@ def retrieve_industry_knowledge(query: str) -> str:
     Searches for precise technical requirements and ATS guidelines based on the candidate's target role.
     """
     print(f"\n📚 [RAG TRIGGERED] Searching ATS industry knowledge for: '{query}'...")
-    q = query.lower()
-    if any(k in q for k in ["med", "health", "doctor", "bhms", "clinic", "patient", "allied"]):
+    import re
+    words = set(re.findall(r"[a-z0-9]+", query.lower()))
+    
+    med_terms = {"medical", "medicine", "med", "health", "healthcare", "doctor", "physician", "bhms", "clinic", "clinical", "patient", "allied"}
+    fin_terms = {"finance", "financial", "banking", "bank", "invest", "investment", "roi", "accounting", "accountant", "money", "equity", "wealth", "portfolio", "business"}
+    mkt_terms = {"marketing", "market", "content", "social", "growth", "seo", "media", "creator", "youtube", "affiliate", "campaign"}
+    tech_terms = {"code", "coding", "software", "dev", "developer", "tech", "technical", "cs", "computer", "engineer", "engineering", "data", "web", "api", "backend", "frontend"}
+
+    if words & med_terms or any(w.startswith("medic") or w.startswith("clinic") for w in words):
         return INDUSTRY_RUBRICS["medical"]
-    elif any(k in q for k in ["finan", "bank", "invest", "roi", "account", "money", "equity", "wealth", "portfolio", "business"]):
+    elif words & fin_terms or any(w.startswith("financ") or w.startswith("invest") for w in words):
         return INDUSTRY_RUBRICS["finance"]
-    elif any(k in q for k in ["market", "content", "social", "growth", "seo", "media", "creator", "youtube"]):
+    elif words & mkt_terms or any(w.startswith("market") for w in words):
         return INDUSTRY_RUBRICS["marketing"]
-    elif any(k in q for k in ["code", "software", "dev", "tech", "cs", "computer", "engineer", "data", "web", "api"]):
+    elif words & tech_terms or any(w.startswith("softw") or w.startswith("develop") or w.startswith("comput") or w.startswith("engine") for w in words):
         return INDUSTRY_RUBRICS["tech"]
 
     return "General professional standards: Focus on clarity, quantifiable impact, ownership of projects, and team leadership."

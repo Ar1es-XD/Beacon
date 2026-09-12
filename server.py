@@ -198,6 +198,7 @@ async def chat_with_agent(message: ChatMessage):
             orchestrator.chat_history.pop()
 
         orchestrator.process_user_answer(last_question, message.user_answer)
+        save_session_cache(message.session_id, orchestrator)
         
         action_data = orchestrator.determine_next_action()
         

@@ -845,7 +845,7 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
           <div class="pulse-dots">
             <span></span><span></span><span></span>
           </div>
-          <span>BEACON is analyzing context and querying ChromaDB...</span>
+          <span>BEACON is analyzing context and evaluating ATS rubrics...</span>
         `;
         chatFeed.appendChild(reasoningCardEl);
         scrollChatToBottom();
