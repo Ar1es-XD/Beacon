@@ -346,11 +346,7 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
   // -------------------------------------------------------------
   // Toast Notifications
   // -------------------------------------------------------------
-  function showToast(message, icon = "ℹ️") {
-    const toast = document.createElement("div");
-    toast.className = "toast";
-    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
-    toastContainer.appendChild(toast);
+    toast.textContent = `${icon} ${message}`;
 
     setTimeout(() => {
       toast.style.opacity = "0";
