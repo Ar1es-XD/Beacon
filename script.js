@@ -8,6 +8,12 @@
   // Configuration & State
   // -------------------------------------------------------------
   const API_BASE_URL = (function () {
+    if (
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") &&
+      window.location.port !== "8000"
+    ) {
+      return "http://localhost:8000/api";
+    }
     if (window.location.protocol.startsWith("http")) {
       return `${window.location.origin}/api`;
     }
@@ -254,15 +260,27 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
         statusPill.className = "status-pill";
         statusText.innerText = data.has_gemini_key ? "Gemini 3.6 Online" : "Gemini Key Missing";
         return true;
+      } else {
+        statusPill.className = "status-pill offline";
+        statusText.innerText = `Backend Error (${res.status})`;
+        return false;
       }
     } catch (err) {
       statusPill.className = "status-pill offline";
-      statusText.innerText = "Backend Offline (:8000)";
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      statusText.innerText = isLocal ? "Backend Offline (:8000)" : "Backend Offline";
+      if (window.location.protocol === "file:") {
+        showToast("Open http://localhost:8000 in browser for backend access", "⚠️");
+      }
       return false;
     }
   }
   checkBackendHealth();
   setInterval(checkBackendHealth, 30000);
+  statusPill.addEventListener("click", () => {
+    statusText.innerText = "Checking...";
+    checkBackendHealth();
+  });
 
   // -------------------------------------------------------------
   // Toast Notifications

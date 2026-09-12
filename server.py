@@ -87,16 +87,20 @@ def safe_parse_state(state_json):
         return {}
 
 @app.get("/api/health")
+@app.get("/health")
 async def health_check():
     """Health and configuration check for frontend."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    sample_path = os.path.join(base_dir, "sample_resume.pdf")
     return {
         "status": "online",
         "has_gemini_key": bool(os.environ.get("GEMINI_API_KEY")),
-        "sample_available": os.path.exists("sample_resume.pdf"),
+        "sample_available": os.path.exists(sample_path),
         "active_sessions": len(active_sessions)
     }
 
 @app.post("/api/upload")
+@app.post("/upload")
 async def upload_resume(file: UploadFile = File(...)):
     """Handles the initial PDF upload and kicks off the agent workflow."""
     safe_filename = f"beacon_upload_{uuid.uuid4().hex}.pdf"
@@ -135,9 +139,11 @@ async def upload_resume(file: UploadFile = File(...)):
                 pass
 
 @app.post("/api/sample")
+@app.post("/sample")
 async def load_sample():
     """Immediately loads and parses the sample_resume.pdf for quick testing."""
-    sample_path = "sample_resume.pdf"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    sample_path = os.path.join(base_dir, "sample_resume.pdf")
     if not os.path.exists(sample_path):
         return JSONResponse(status_code=404, content={"status": "error", "message": "sample_resume.pdf not found"})
     try:
@@ -164,6 +170,7 @@ async def load_sample():
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 @app.post("/api/chat")
+@app.post("/chat")
 async def chat_with_agent(message: ChatMessage):
     """Handles the back-and-forth interview loop with stateless serverless support."""
     orchestrator = None
@@ -245,6 +252,7 @@ async def chat_with_agent(message: ChatMessage):
         return JSONResponse(status_code=500, content={"status": "error", "message": err_msg})
 
 @app.get("/api/state/{session_id}")
+@app.get("/state/{session_id}")
 async def get_session_state(session_id: str):
     orchestrator = get_or_restore_session(session_id)
     if not orchestrator:
@@ -256,8 +264,8 @@ async def get_session_state(session_id: str):
         "chat_history": orchestrator.chat_history
     }
 
-# Static file delivery for frontend
-if os.path.exists("index.html"):
+# Static file delivery for frontend (only when not running inside Vercel serverless)
+if os.path.exists("index.html") and not os.environ.get("VERCEL"):
     app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":

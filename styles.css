@@ -243,6 +243,8 @@ body {
   font-weight: 500;
   color: var(--text-secondary);
   transition: all 200ms;
+  cursor: pointer;
+  user-select: none;
 }
 .status-pill .dot {
   width: 7px;

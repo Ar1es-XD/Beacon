@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "{server.py,main.py,sample_resume.pdf}"
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
