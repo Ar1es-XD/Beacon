@@ -68,7 +68,7 @@ client = genai.Client(api_key=api_key)
 import chromadb
 
 # Initialize ChromaDB client (stores data locally in a 'vector_db' folder)
-chroma_client = chromadb.PersistentClient(path="./vector_db")
+chroma_client = chromadb.PersistentClient(path="/tmp/vector_db")
 
 # Create or get a collection for ATS rubrics
 ats_collection = chroma_client.get_or_create_collection(name="ats_rubrics")
