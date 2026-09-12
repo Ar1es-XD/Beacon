@@ -18,6 +18,7 @@
   let currentSessionId = null;
   let currentStage = "INGESTION";
   let currentParsedState = null;
+  let chatHistory = [];
   let isWaitingForAgent = false;
   let demoStepIndex = 0;
 
@@ -467,6 +468,7 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     sessionIdDisplay.innerText = `Session: ${currentSessionId}`;
     setStage(data.stage || "VALIDATION");
     demoStepIndex = 1;
+    chatHistory = data.chat_history || (data.agent_message ? [{ role: "agent", content: data.agent_message }] : []);
 
     // Switch Left Panel View to Parsed Profile
     uploadCardWrapper.classList.add("hidden");
@@ -643,12 +645,16 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
     }
 
     try {
+      chatHistory.push({ role: "user", content: text });
       const response = await fetch(`${API_BASE_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: currentSessionId,
-          user_answer: text
+          user_answer: text,
+          current_state: currentParsedState,
+          current_stage: currentStage,
+          chat_history: chatHistory
         })
       });
 
@@ -659,6 +665,12 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
           throw new Error("Gemini free tier rate limit reached (5 req/min). Please wait a few seconds or switch to Instant Demo Mode.");
         }
         throw new Error(data.message || data.error || "Interview request failed");
+      }
+
+      if (data.chat_history) {
+        chatHistory = data.chat_history;
+      } else if (data.agent_message) {
+        chatHistory.push({ role: "agent", content: data.agent_message });
       }
 
       if (data.parsed_state) {
@@ -972,6 +984,7 @@ sangu.h.y@example.com | [youtube.com/WealthAndWisdom](https://youtube.com/Wealth
       currentSessionId = null;
       currentStage = "INGESTION";
       currentParsedState = null;
+      chatHistory = [];
       finalResumeMarkdown = "";
       demoStepIndex = 0;
 
