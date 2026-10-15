@@ -1,7 +1,7 @@
 # server.py
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Any
@@ -85,6 +85,66 @@ def safe_parse_state(state_json):
         return json.loads(state_json) if state_json else {}
     except Exception:
         return {}
+
+def _find_static_file(filename: str) -> Optional[str]:
+    """Finds static file across public/ and root directory."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, "public", filename),
+        os.path.join(base_dir, filename),
+        os.path.join("public", filename),
+        filename,
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+@app.get("/")
+@app.get("/index.html")
+async def serve_index():
+    """Serves the frontend application HTML directly if requested."""
+    index_path = _find_static_file("index.html")
+    if index_path:
+        return FileResponse(index_path, media_type="text/html")
+    return {
+        "status": "online",
+        "service": "BEACON Agent API",
+        "health": "/api/health",
+        "endpoints": ["/api/health", "/api/upload", "/api/sample", "/api/chat", "/api/state/{session_id}"]
+    }
+
+@app.get("/styles.css")
+async def serve_css():
+    """Serves styles.css if requested directly through the ASGI application."""
+    css_path = _find_static_file("styles.css")
+    if css_path:
+        return FileResponse(css_path, media_type="text/css")
+    return JSONResponse(status_code=404, content={"status": "error", "message": "styles.css not found"})
+
+@app.get("/script.js")
+async def serve_js():
+    """Serves script.js if requested directly through the ASGI application."""
+    js_path = _find_static_file("script.js")
+    if js_path:
+        return FileResponse(js_path, media_type="application/javascript")
+    return JSONResponse(status_code=404, content={"status": "error", "message": "script.js not found"})
+
+@app.get("/api")
+@app.get("/api/")
+async def api_root():
+    """API entry point description."""
+    return {
+        "status": "online",
+        "service": "BEACON Agent API",
+        "health": "/api/health",
+        "docs": "/docs"
+    }
+
+@app.get("/favicon.ico")
+async def favicon():
+    """Returns 204 No Content for favicon requests."""
+    return JSONResponse(status_code=204, content=None)
 
 @app.get("/api/health")
 @app.get("/health")
@@ -265,8 +325,14 @@ async def get_session_state(session_id: str):
     }
 
 # Static file delivery for frontend (only when not running inside Vercel serverless)
-if os.path.exists("index.html") and not os.environ.get("VERCEL"):
-    app.mount("/", StaticFiles(directory=".", html=True), name="static")
+_static_dir = None
+for candidate in ["public", "."]:
+    if os.path.exists(os.path.join(candidate, "index.html")):
+        _static_dir = candidate
+        break
+
+if _static_dir and not os.environ.get("VERCEL"):
+    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="static")
 
 if __name__ == "__main__":
     print("🚀 Starting BEACON Backend Server on port 8000...")
